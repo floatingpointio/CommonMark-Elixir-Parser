@@ -91,8 +91,8 @@ defmodule Parser do
 		parseLineChars(rest, Map.put(cInfo, CurrentLine, cInfo[CurrentLine] <> char))
 	end
 
-
-	# Last char in Line
+ 
+	# Lastchar in Line
 	#defp parseLineChars([char|[]], cInfo) do
 	#	
 	#end
