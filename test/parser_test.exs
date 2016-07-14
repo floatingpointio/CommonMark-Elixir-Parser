@@ -2,54 +2,72 @@ defmodule ParserTest do
   use ExUnit.Case
   doctest Parser
 
-  test "paragraf1" do
-		input = ~s(Ovo je paragraf broj 1 \n\n   Ovo je paragraf broj 2\n\n       a ovo je i zadnji paragraf)
+  test "paragrafGeneral" do
+		input = ~s(Ovo je    paragraf broj 1 \n    \n   Ovo je  paragraf broj 2\n\n\n   a ovo je i zadnji paragraf\nskupa s ovim\n\n)
 
 		expected = [
 			%{
-				"paragraph" => "Ovo je paragraf broj 1"
+				Block => "paragraph",Content => [%{Text => "Ovo je paragraf broj 1", Type => "normal"}]
 			},
 			%{
-				"paragraph" => "Ovo je paragraf broj 2"
+				Block => "paragraph",Content => [%{Text => "Ovo je paragraf broj 2", Type => "normal"}]
 			},
 			%{
-				"paragraph" => "a ovo je i zadnji paragraf"
-			}
+				Block => "paragraph",Content => [%{Text => "a ovo je i zadnji paragraf", Type => "normal"},
+				                                 %{Text => "skupa s ovim", Type => "normal"}]
+			},
+			
 		]
 		result = Parser.parse(input)
 		assert(result == expected)
 	end
 
-	test "paragraf2" do
-		input = ~s(Ovo je paragraf broj 1\n\n \n \nOvo je paragraf broj 2\n   \na ovo je i zadnji paragraf)
+	test "paragrafBreaks" do
+		input = ~s(Ovo je paragraf\\\nkoji se nastavlja sa breakom  \nkoji se isto nastavlja sa breakom)
 
 		expected = [
 			%{
-				"paragraph" => "Ovo je paragraf broj 1"
-			},
-			%{
-				"paragraph" => "Ovo je paragraf broj 2"
-			},
-			%{
-				"paragraph" => "a ovo je i zadnji paragraf"
+				Block => "paragraph",Content => [%{Text => "Ovo je paragraf", Type => "normal"},
+												 %{Type => "break"},
+												 %{Text => "koji se nastavlja sa breakom", Type => "normal"},
+												 %{Type => "break"},
+												 %{Text => "koji se isto nastavlja sa breakom", Type => "normal"},
+												]
 			}
+			
 		]
 		result = Parser.parse(input)
 		assert(result == expected)
 	end
 
-	test "paragraf3" do
-		input = ~s(Ovo je paragraf broj 1\nOvo je paragraf broj 2\na ovo je i zadnji paragraf)
+	
 
-		expected = [
-			%{
-				"paragraph" => "Ovo je paragraf broj 1Ovo je paragraf broj 2a ovo je i zadnji paragraf"
-			}
+ # 	test "heading1" do
+	# 	input = ~s(# Ovo je prvi heading \n\n## h2  \n### h3\n#### h4\n##### h5\n###### h6  )
 
-		]
-		result = Parser.parse(input)
-		assert(result == expected)
-	end
- 
+	# 	expected = [
+	# 		%{
+	# 			Block => "heading" ,Content => [%{Text: "Ovo je prvi heading", Type: "normal"}], Level => 1
+	# 		},
+	# 		%{
+	# 			Block => "heading" ,Content => [%{Text: "h2", Type: "normal"}], Level => 2
+	# 		},
+	# 		%{
+	# 			Block => "heading" ,Content => [%{Text: "h3", Type: "normal"}], Level => 3
+	# 		},
+	# 		%{
+	# 			Block => "heading" ,Content => [%{Text: "h4", Type: "normal"}], Level => 4
+	# 		},
+	# 		%{
+	# 			Block => "heading" ,Content => [%{Text: "h5", Type: "normal"}], Level => 5
+	# 		},
+	# 		%{
+	# 			Block => "heading" ,Content => [%{Text: "h6", Type: "normal"}], Level => 6
+	# 		}	
+
+	# 	]
+	# 	result = Parser.parse(input)
+	# 	assert(result == expected)
+	# end
  
 end

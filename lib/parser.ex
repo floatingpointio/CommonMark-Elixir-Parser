@@ -42,6 +42,16 @@ defmodule Parser do
 		cInfo |> finishBlock
 	end
 
+	defp lineEndCheck(cInfo) do
+
+		cond do 
+			cInfo[CurrentBlock][Block] == "paragraph" and (String.slice(cInfo[CurrentLine],-2,2) == "  " or String.slice(cInfo[CurrentLine], -1, 1) == "\\") ->
+				put_in(cInfo, [CurrentBlock, Content], cInfo[CurrentBlock][Content] ++ [%{Type => "break"}])
+			true ->
+				cInfo
+		end 
+	end
+
 
 
 
@@ -50,6 +60,7 @@ defmodule Parser do
 	defp finishBlock(cInfo) do
 		if cInfo[CurrentBlock] do
 			currentBlock = cInfo[CurrentBlock]
+			
 			Map.put(cInfo, AST, cInfo[AST] ++ [currentBlock |> trimBlockContent]) 
 			|> Map.put(CurrentBlock, nil) 
 			|> Map.put(PreviousBlock, currentBlock)
@@ -68,13 +79,12 @@ defmodule Parser do
 
 	defp parseLineChars([char|rest], cInfo) do
 
-
-	
+		
 		if space?(char) and not firstChar?(cInfo[CurrentLine]) do
 
 			currentLine = String.graphemes(cInfo[CurrentLine])
-			previousChar = Enum.at(currentLine,-1)
-			prePreviousChar = Enum.at(currentLine,-2)
+			previousChar = if Enum.at(currentLine,-1) do Enum.at(currentLine,-1) else "" end 
+			prePreviousChar = Enum.at(currentLine,-2) do Enum.at(currentLine,-2) else "" end
 				
 			cond do	
 
@@ -82,30 +92,29 @@ defmodule Parser do
 					cInfo = cInfo |> addBlock(previousChar) |> addChars(char)
 				regularCharset?(previousChar) or previousChar == ""->
 					cInfo = cInfo |> addChars(char)
+			    space?(previousChar) and cInfo[CurrentBlock] ->
+			    	cInfo
 			end
 			
 		else
 			cInfo = addChars(cInfo, char)
 		end
-
+		
 		parseLineChars(rest, Map.put(cInfo, CurrentLine, cInfo[CurrentLine] <> char))
 	end
 
- 
-	# Lastchar in Line
-	#defp parseLineChars([char|[]], cInfo) do
-	#	
-	#end
 
+
+	defp parseLineChars([], cInfo) do
+
+		cInfo = lineEndCheck(cInfo)
+
+		Map.put(cInfo, CurrentLine, "") 
+		|> Map.put(LastLine, cInfo[CurrentLine])
+	end
 
 	defp firstChar?(lineContent) do
 		empty?(lineContent)
-	end
-
-	defp parseLineChars([], cInfo) do
-		
-		Map.put(cInfo, CurrentLine, "") 
-		|> Map.put(LastLine, cInfo[CurrentLine])
 	end
 
 	defp nextChar([char|rest]) do
@@ -126,13 +135,16 @@ defmodule Parser do
 	defp addChars(cInfo, char) do
 
 		if cInfo[CurrentBlock] do
-			#depth = cInfo[BlockDepth]
-			#index = cInfo[BlockIndex]
 			
-			currentBlockName = Map.keys(cInfo[CurrentBlock]) |> Enum.at(0)
-			cInfo = Map.put(cInfo, CurrentBlock, %{currentBlockName => cInfo[CurrentBlock][currentBlockName] <> char})
+			if String.length(cInfo[CurrentLine]) == 0 do
+				
+				cInfo = put_in(cInfo, [CurrentBlock, Content], cInfo[CurrentBlock][Content] ++ [%{Text => "", Type => "normal"}])
+			end
+
+			put_in(cInfo, [CurrentBlock, Content], List.replace_at(cInfo[CurrentBlock][Content], -1, Map.put(Enum.at(cInfo[CurrentBlock][Content],-1), Text, Enum.at(cInfo[CurrentBlock][Content],-1)[Text] <> char)))
+			
 		else
-		   addBlock(cInfo, "paragraph", char)
+		   addBlock(cInfo, "paragraph", char, "normal")
 		end
 		
 	end
@@ -141,20 +153,32 @@ defmodule Parser do
 	# add current block
 
 	
-	#defp addBlock(cInfo, blockChar) do
-	#	currentBlock = Map.keys(cInfo[CurrentBlock]) |> Enum.at(0)
-	#	cInfo
-	#end	
+	defp addBlock(cInfo, blockChar) do
+		cInfo
+	end	
 
-	defp addBlock(cInfo, block, value) do
-		Map.put(cInfo, CurrentBlock, %{block => value})
+	defp addBlock(cInfo, block, value, type) do
+		Map.put(cInfo, CurrentBlock, %{Block => block, Content => [%{Text => value, Type => type}]})
 	end
 
-	defp trimBlockContent(map) do
-		blockName = Map.keys(map) |> Enum.at(0)
-		Map.put(map,blockName, map[blockName] |> String.trim)
+	defp trimBlockContent(block) do
+
+		Map.put(block, Content, trimContent(block[Content],[]))
+
 	end
 
+	defp trimContent([content|rest], newContent) do
+
+		if Map.has_key?(content, Text) do
+			content = Map.put(content, Text, content[Text] |> String.trim |>  String.trim_trailing("\\"))
+		end
+		
+		trimContent(rest, newContent ++ [content])
+	end
+
+	defp trimContent([],newContent) do
+		newContent
+	end
 
 
 	# Other
@@ -168,7 +192,7 @@ defmodule Parser do
 	end
 
 	defp regularCharset?(char) do 
-		Regex.match?(~r/[A-Za-z0-9]{1}/, char)
+		Regex.match?(~r/[A-Za-z0-9\\]{1}/, char)
 	end
 
 	defp orderedListCharset?(char) do
@@ -188,3 +212,5 @@ defmodule Parser do
     end
 
 end
+
+
