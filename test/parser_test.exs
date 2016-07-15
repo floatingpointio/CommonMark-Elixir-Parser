@@ -15,7 +15,7 @@ defmodule ParserTest do
 			%{
 				Block => "paragraph",Content => [%{Text => "a ovo je i zadnji paragraf", Type => "normal"},
 				                                 %{Text => "skupa s ovim", Type => "normal"}]
-			},
+			}
 			
 		]
 		result = Parser.parse(input)
@@ -28,9 +28,9 @@ defmodule ParserTest do
 		expected = [
 			%{
 				Block => "paragraph",Content => [%{Text => "Ovo je paragraf", Type => "normal"},
-												 %{Type => "break"},
+												 %{Block => "break"},
 												 %{Text => "koji se nastavlja sa breakom", Type => "normal"},
-												 %{Type => "break"},
+												 %{Block => "break"},
 												 %{Text => "koji se isto nastavlja sa breakom", Type => "normal"},
 												]
 			}
@@ -42,32 +42,75 @@ defmodule ParserTest do
 
 	
 
- # 	test "heading1" do
-	# 	input = ~s(# Ovo je prvi heading \n\n## h2  \n### h3\n#### h4\n##### h5\n###### h6  )
+ 	test "headingTest1" do
+		input = ~s(# Ovo je prvi heading \n\n## h2  \n### h3\n#### h4\n##### h5\n###### h6  )
 
-	# 	expected = [
-	# 		%{
-	# 			Block => "heading" ,Content => [%{Text: "Ovo je prvi heading", Type: "normal"}], Level => 1
-	# 		},
-	# 		%{
-	# 			Block => "heading" ,Content => [%{Text: "h2", Type: "normal"}], Level => 2
-	# 		},
-	# 		%{
-	# 			Block => "heading" ,Content => [%{Text: "h3", Type: "normal"}], Level => 3
-	# 		},
-	# 		%{
-	# 			Block => "heading" ,Content => [%{Text: "h4", Type: "normal"}], Level => 4
-	# 		},
-	# 		%{
-	# 			Block => "heading" ,Content => [%{Text: "h5", Type: "normal"}], Level => 5
-	# 		},
-	# 		%{
-	# 			Block => "heading" ,Content => [%{Text: "h6", Type: "normal"}], Level => 6
-	# 		}	
+		expected = [
+			%{
+				Block => "heading" ,Content => [%{Text => "Ovo je prvi heading", Type => "normal"}], Level => 1
+			},
+			%{
+				Block => "heading" ,Content => [%{Text => "h2", Type => "normal"}], Level => 2
+			},
+			%{
+				Block => "heading" ,Content => [%{Text => "h3", Type => "normal"}], Level => 3
+			},
+			%{
+				Block => "heading" ,Content => [%{Text => "h4", Type => "normal"}], Level => 4
+			},
+			%{
+				Block => "heading" ,Content => [%{Text => "h5", Type => "normal"}], Level => 5
+			},
+			%{
+				Block => "heading" ,Content => [%{Text => "h6", Type => "normal"}], Level => 6
+			}	
 
-	# 	]
-	# 	result = Parser.parse(input)
-	# 	assert(result == expected)
-	# end
+		]
+		result = Parser.parse(input)
+		assert(result == expected)
+	end
+
+	test "headingTest2" do
+		input = ~s(# Ovo je prvi heading \n\n##Ovo je paragraf  \n\n## #h3\n####### Ovo je isto paragraf)
+
+		expected = [
+			%{
+				Block => "heading" ,Content => [%{Text => "Ovo je prvi heading", Type => "normal"}], Level => 1
+			},
+			%{
+				Block => "paragraph" ,Content => [%{Text => "##Ovo je paragraf", Type => "normal"},
+												  %{Block => "break"}
+												 ]
+			},
+			%{
+				Block => "heading" ,Content => [%{Text => "#h3", Type => "normal"}], Level => 2
+			},
+			%{
+				Block => "paragraph" ,Content => [%{Text => "####### Ovo je isto paragraf", Type => "normal"}]
+			}
+		]
+		result = Parser.parse(input)
+		assert(result == expected)
+	end
+
+	test "headingTest3" do
+		input = ~s(Ovo je prvi heading\n=== \n\nDrugi heading\n----------\n\n___________)
+
+		expected = [
+			%{
+				Block => "heading" ,Content => [%{Text => "Ovo je prvi heading", Type => "normal"}], Level => 1
+			},
+			%{
+				Block => "heading" ,Content => [%{Text => "Drugi heading", Type => "normal"}], Level => 2
+												 
+			},
+			%{
+				Block => "horizontal line"
+												 
+			}
+		]
+		result = Parser.parse(input)
+		assert(result == expected)
+	end
  
 end
