@@ -94,11 +94,15 @@ defmodule ParserTest do
 	end
 
 	test "headingTest3" do
-		input = ~s(Ovo je prvi heading\n=== \n\nDrugi heading\n----------\n\n___________)
+		input = ~s(Ovo je prvi heading\n=== \n\n***************\nDrugi heading\n----------\n\n___________)
 
 		expected = [
 			%{
 				Block => "heading" ,Content => [%{Text => "Ovo je prvi heading", Type => "normal"}], Level => 1
+			},
+			%{
+				Block => "horizontal line"
+												 
 			},
 			%{
 				Block => "heading" ,Content => [%{Text => "Drugi heading", Type => "normal"}], Level => 2

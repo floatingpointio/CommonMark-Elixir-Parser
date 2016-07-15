@@ -41,7 +41,7 @@ defmodule Parser do
 					if cInfo[CurrentBlock][Block] == "paragraph" do
 						cInfo = cInfo |> moveBlockContent(cInfo[CurrentBlock][Content], "heading", 2)	
 					end
-				Regex.match?(~r/^_+\s*$/,line) ->
+				Regex.match?(~R/^(_|\*)+\s*$/,line) ->
 					
 					if cInfo[CurrentBlock] do
 						cInfo = cInfo |> finishBlock
