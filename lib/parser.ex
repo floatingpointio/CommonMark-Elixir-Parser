@@ -27,27 +27,90 @@ defmodule Parser do
 
 	defp parseLines([line|rest], cInfo) do
 
-		
-		if !empty?(line) do
+		currentBlock = cInfo[CurrentBlock][Block]
+
+		if !empty?(line) do	
 
 			cond do
 
-				Regex.match?(~r/^=+\s*$/,line) ->
-					IO.inspect("Tu sam")
-					if cInfo[CurrentBlock][Block] == "paragraph" do
-						cInfo = cInfo |> moveBlockContent(cInfo[CurrentBlock][Content], "heading", 1)	
+
+				Regex.match?(~r/^`{3,}\s*/,line) ->
+
+					if currentBlock do
+						if currentBlock == "code block" do
+							cInfo = cInfo |> finishBlock
+						else
+							cInfo = cInfo |> addBlock("code block") |> createBlockContent |> addBlockAttribute(Type,1)
+							class = Regex.replace(~r/^`{3,}\s*/, line, "")
+							if !empty?(class) do
+								cInfo = cInfo |> addBlockAttribute(Class,"language-" <> class)
+							end 	
+						end
+					else
+						cInfo = cInfo |> addBlock("code block") |> createBlockContent |> addBlockAttribute(Type,1)
+						class = Regex.replace(~r/^`{3,}\s*/, line, "")
+						if !empty?(class) do
+							cInfo = cInfo |> addBlockAttribute(Class,"language-" <> class)
+						end 
 					end
-				Regex.match?(~r/^-+\s*$/,line) ->
-					if cInfo[CurrentBlock][Block] == "paragraph" do
-						cInfo = cInfo |> moveBlockContent(cInfo[CurrentBlock][Content], "heading", 2)	
+
+				Regex.match?(~r/^\s{4}.+$/, line) ->
+
+					text = Regex.replace(~r/^\s{4}/, line, "")
+					if !currentBlock do
+						cInfo = cInfo |> addBlock("code block") |> createBlockContent |> addBlockAttribute(Type,2) |> addChars(text)
+					else
+						cond do
+							currentBlock == "paragraph" ->
+								cInfo =  cInfo |> finishBlock |> addBlock("code block") |> createBlockContent |> addBlockAttribute(Type, 2) |> addChars(text)
+							currentBlock == "code block" and cInfo[CurrentBlock][Type] == 1 ->
+								cInfo = cInfo |> addChars(line) 
+							currentBlock == "code block" and cInfo[CurrentBlock][Type] == 2 ->
+								cInfo = cInfo |> addChars(text) 	
+						end
+						
 					end
-				Regex.match?(~R/^(_|\*)+\s*$/,line) ->
-					
+
+				(Regex.match?(~R/^#{1,6}$/, line) or Regex.match?(~R/^#{1,6}\s+#+\s*$/,line)) and currentBlock != "code block"->
+
+					if currentBlock == "paragraph" do
+						cInfo = cInfo |> finishBlock
+					end
+
+					level = String.length(String.trim(Enum.at(Regex.run(~R/^\s*#{1,6}/,line),-1)))
+					cInfo = cInfo |> addBlock("heading", level, "", "normal") |> finishBlock
+
+				Regex.match?(~r/^\s{0,3}=+\s*$/,line) and currentBlock != "code block"->
+					if currentBlock do
+						if currentBlock == "paragraph" do
+							cInfo = cInfo |> moveBlockContent(cInfo[CurrentBlock][Content], "heading", 1)	
+						else
+							cInfo = cInfo |> addChars(line)
+						end
+					else
+						cInfo = cInfo
+					end
+
+				Regex.match?(~r/^\s{0,3}-+\s*$/,line) and currentBlock != "code block" ->
+					if currentBlock do
+						if currentBlock == "paragraph" do
+							cInfo = cInfo |> moveBlockContent(cInfo[CurrentBlock][Content], "heading", 2)	
+						else
+							cInfo = cInfo |> addChars(line)
+						end
+					else
+						cInfo = cInfo |> addBlock("horizontal line")
+					end
+				(Regex.match?(~R/^\s*(_|\*|-)+\s*$/,line) or Regex.match?(~r/^\s*(-+\s+){2}(-+\s*)*$/,line) or Regex.match?(~R/^\s*(_+\s+){2}(_+\s*)*$/,line) or Regex.match?(~R/^\s*(\*+\s+){2}(\*+\s*)*$/,line) or Regex.match?(~R/^\s*(=+\s+){2}(=+\s*)*$/,line)) and currentBlock != "code block" ->
+
 					if cInfo[CurrentBlock] do
 						cInfo = cInfo |> finishBlock
 					end
 					cInfo = cInfo |> addBlock("horizontal line")
 				true ->
+					if (currentBlock == "code block"  and cInfo[CurrentBlock][Type] == 2) do
+						cInfo = cInfo |> finishBlock
+					end 
 					cInfo = String.graphemes(line) |> parseLineChars(cInfo)
 
 			end
@@ -58,7 +121,9 @@ defmodule Parser do
 			end
 
 		else
-			cInfo = cInfo |> finishBlock
+			if currentBlock != "code block" or (currentBlock == "code block" and cInfo[CurrentBlock][Type] == "2") do
+				cInfo = cInfo |> finishBlock
+			end	
 		end
 		parseLines(rest, cInfo)
 	end
@@ -86,9 +151,21 @@ defmodule Parser do
 	defp finishBlock(cInfo) do
 
 		if cInfo[CurrentBlock] do
-			currentBlock = cInfo[CurrentBlock]
+
+			cond do
+				cInfo[CurrentBlock][Block] == "code block" ->
+					currentBlock = Map.delete(cInfo[CurrentBlock],Type)
+				cInfo[CurrentBlock][Block] == "heading" ->
+					if Regex.match?(~R/\s#+\s*$/,Enum.at(cInfo[CurrentBlock][Content],-1)[Text]) do
+						currentBlock = cInfo[CurrentBlock] |> trimSpecialHeading |> trimBlockContent
+					else
+						currentBlock = cInfo[CurrentBlock] |> trimBlockContent
+					end 
+				true ->
+					currentBlock = cInfo[CurrentBlock] |> trimBlockContent
+			end
 			
-			Map.put(cInfo, AST, cInfo[AST] ++ [currentBlock |> trimBlockContent]) 
+			Map.put(cInfo, AST, cInfo[AST] ++ [currentBlock])
 			|> Map.put(CurrentBlock, nil) 
 			|> Map.put(PreviousBlock, currentBlock)
 			|> Map.put(BlockDepth,cInfo[BlockDepth] -1)
@@ -107,24 +184,26 @@ defmodule Parser do
 
 	defp parseLineChars([char|rest], cInfo) do
 
+		currentBlock = cInfo[CurrentBlock][Block]
 
+		
 		
 		if space?(char) and not firstChar?(cInfo[CurrentLine]) do
 
+			
 			currentLine = String.graphemes(cInfo[CurrentLine])
 			previousChar = if Enum.at(currentLine,-1) do Enum.at(currentLine,-1) else "" end 
 			prePreviousChar = if Enum.at(currentLine,-2) do Enum.at(currentLine,-2) else "" end
 
-				
 			cond do	
 
 				blockCharset?(previousChar) and !escaped?(previousChar) ->
 					cInfo = cInfo |> processBlock(previousChar) |> addChars(char)
+				space?(previousChar) and cInfo[CurrentBlock] ->
+			    	cInfo = cInfo
 				regularCharset?(previousChar) or previousChar == ""->
 					cInfo = cInfo |> addChars(char)
-			    space?(previousChar) and cInfo[CurrentBlock] ->
-			    	cInfo = cInfo
-
+			    
 			end
 			
 		else
@@ -168,15 +247,20 @@ defmodule Parser do
 
 		if cInfo[CurrentBlock] do
 			
-			if String.length(cInfo[CurrentLine]) == 0 do
+			if !(Enum.at(String.graphemes(cInfo[CurrentLine]),-1) == " " and char == " ") do
 				
-				cInfo = put_in(cInfo, [CurrentBlock, Content], cInfo[CurrentBlock][Content] ++ [%{Text => "", Type => "normal"}])
-			end
+				if String.length(cInfo[CurrentLine]) == 0 do
+				
+					cInfo = put_in(cInfo, [CurrentBlock, Content], cInfo[CurrentBlock][Content] ++ [%{Text => "", Type => "normal"}])
+				end
 
-			put_in(cInfo, [CurrentBlock, Content], List.replace_at(cInfo[CurrentBlock][Content], -1, Map.put(Enum.at(cInfo[CurrentBlock][Content],-1), Text, Enum.at(cInfo[CurrentBlock][Content],-1)[Text] <> char)))
+				put_in(cInfo, [CurrentBlock, Content], List.replace_at(cInfo[CurrentBlock][Content], -1, Map.put(Enum.at(cInfo[CurrentBlock][Content],-1), Text, Enum.at(cInfo[CurrentBlock][Content],-1)[Text] <> char)))
+			else
+				cInfo
+			end
+			
 			
 		else
-
 
 			if regularCharset?(char) do
 				addBlock(cInfo, "paragraph", cInfo[CurrentLine] <> char, "normal")	
@@ -189,18 +273,12 @@ defmodule Parser do
 	end
 
 
-
-
-
-
-
-
 	# add current block
 
 	
 	defp processBlock(cInfo, blockChar) do
 		cond do 
-			blockChar == "#"->
+			blockChar == "#" ->
 				cInfo |> headingBlock
 			true ->
 				cInfo
@@ -217,6 +295,14 @@ defmodule Parser do
 
 	defp addBlock(cInfo, block, level,value, type) do
 		Map.put(cInfo, CurrentBlock, %{Block => block, Content => [%{Text => value, Type => type}], Level => level})
+	end
+
+	defp addBlockAttribute(cInfo, attribute, value) do
+		put_in(cInfo, [CurrentBlock, attribute], value)
+	end
+
+	defp createBlockContent(cInfo) do
+		put_in(cInfo, [CurrentBlock, Content], [])
 	end
 
 	defp moveBlockContent(cInfo, content, block) do
@@ -244,6 +330,7 @@ defmodule Parser do
 		
 	end
 
+
 	defp trimBlockContent(block) do
 
 		if Map.has_key?(block, Content) do
@@ -268,6 +355,14 @@ defmodule Parser do
 		newContent
 	end
 
+	defp trimSpecialHeading(block) do
+		
+		lastText = Enum.at(block[Content],-1)
+		match = Enum.at(Regex.run(~R/\s#+\s*$/, lastText[Text]), -1)
+		lastText = Map.put(lastText,Text, String.replace_suffix(lastText[Text], match, ""))
+		put_in(block, [Content], List.replace_at(block[Content], -1, lastText))
+	
+	end
 
 
 
@@ -293,6 +388,10 @@ defmodule Parser do
 
 	defp blockCharset?(char) do
 		char == "#" or char == "`" or char == "+" or char == "-" or char == "*" or char == "=" or char == "." or char == ")"
+	end
+
+	defp inlineCharset?(char) do
+		char == "*" or char == "_"
 	end
 
 	defp textToList(string) do

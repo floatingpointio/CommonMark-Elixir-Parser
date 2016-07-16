@@ -43,7 +43,7 @@ defmodule ParserTest do
 	
 
  	test "headingTest1" do
-		input = ~s(# Ovo je prvi heading \n\n## h2  \n### h3\n#### h4\n##### h5\n###### h6  )
+		input = ~s(#         Ovo je prvi heading        \n\n ## h2 #\n### h3\n#### h4\n##### h5\n###### h6  )
 
 		expected = [
 			%{
@@ -71,7 +71,7 @@ defmodule ParserTest do
 	end
 
 	test "headingTest2" do
-		input = ~s(# Ovo je prvi heading \n\n##Ovo je paragraf  \n\n## #h3\n####### Ovo je isto paragraf)
+		input = ~s(# Ovo je prvi heading #### \n\n##Ovo je paragraf  \n\n## #h3\n####### Ovo je isto paragraf)
 
 		expected = [
 			%{
@@ -94,11 +94,15 @@ defmodule ParserTest do
 	end
 
 	test "headingTest3" do
-		input = ~s(Ovo je prvi heading\n=== \n\n***************\nDrugi heading\n----------\n\n___________)
+		input = ~s(Ovo je prvi heading\n====       \n\n   - - - - - -\n****  ** **** ** * **     \nDrugi heading\n  ----------\n\n___________)
 
 		expected = [
 			%{
 				Block => "heading" ,Content => [%{Text => "Ovo je prvi heading", Type => "normal"}], Level => 1
+			},
+			%{
+				Block => "horizontal line"
+												 
 			},
 			%{
 				Block => "horizontal line"
@@ -111,6 +115,44 @@ defmodule ParserTest do
 			%{
 				Block => "horizontal line"
 												 
+			}
+		]
+		result = Parser.parse(input)
+		assert(result == expected)
+	end
+
+	test "codeBlockTest1" do
+		input = ~s(```testna\nblablabla\nblbalbalb\n\njos malo blablbalba\n----------\n\n___________\n# Nije heading\n`````)
+
+		expected = [
+			%{
+				Block => "code block" ,Content => [%{Text => "blablabla", Type => "normal"},
+												   %{Text => "blbalbalb", Type => "normal"},
+												   %{Text => "jos malo blablbalba", Type => "normal"},
+												   %{Text => "----------", Type => "normal"},
+												   %{Text => "___________", Type => "normal"},
+												   %{Text => "# Nije heading", Type => "normal"},
+												  ], Class => "language-testna"
+			}
+		]
+		result = Parser.parse(input)
+		assert(result == expected)
+	end
+
+	test "codeBlockTest2" do
+		input = ~s(    janjetinajanjetina\n    prastetinaprasetina\nsrnetinasrnetina\n      zec)
+
+		expected = [
+			%{
+				Block => "code block" ,Content => [%{Text => "janjetinajanjetina", Type => "normal"},
+												   %{Text => "prastetinaprasetina", Type => "normal"}
+												  ]
+			},
+			%{
+				Block => "paragraph",Content => [%{Text => "srnetinasrnetina", Type => "normal"}]
+			},
+			%{
+				Block => "code block" ,Content => [%{Text => "  zec", Type => "normal"}]
 			}
 		]
 		result = Parser.parse(input)
