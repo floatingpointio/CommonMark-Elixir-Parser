@@ -34,21 +34,46 @@ defmodule Parser do
 			cond do
 
 
-				Regex.match?(~r/^`{3,}\s*/,line) ->
+				Regex.match?(~r/^\s*(`|~){3,}\s*/,line) ->
+
+					tag = String.trim(Enum.at(Regex.run(~r/^\s*(`|~){3,}\s*/,line),0))
+					tagLen = String.length(tag)
+					typeChar = String.slice(tag,0,1)
+
 
 					if currentBlock do
 						if currentBlock == "code block" do
-							cInfo = cInfo |> finishBlock
+							if tagLen >= cInfo[CurrentBlock][TagLength] and ((typeChar == "`" and cInfo[CurrentBlock][Type] == 1) or (typeChar == "~" and cInfo[CurrentBlock][Type] == 3)) do
+								cInfo = cInfo |> finishBlock	
+							else
+								cInfo = cInfo |> addChars(line)
+							end
 						else
-							cInfo = cInfo |> addBlock("code block") |> createBlockContent |> addBlockAttribute(Type,1)
-							class = Regex.replace(~r/^`{3,}\s*/, line, "")
+							cInfo = cInfo |> addBlock("code block") |> createBlockContent |> addBlockAttribute(TagLength,tagLen)
+
+							if typeChar == "`" do 
+								cInfo = cInfo |> addBlockAttribute(Type,1)
+								class = Regex.replace(~r/^\s*`{3,}\s*/, line, "")
+							else
+								cInfo = cInfo |> addBlockAttribute(Type,3)
+								class = Regex.replace(~r/^\s*~{3,}\s*/, line, "")
+							end
+							
 							if !empty?(class) do
 								cInfo = cInfo |> addBlockAttribute(Class,"language-" <> class)
 							end 	
 						end
 					else
-						cInfo = cInfo |> addBlock("code block") |> createBlockContent |> addBlockAttribute(Type,1)
-						class = Regex.replace(~r/^`{3,}\s*/, line, "")
+						cInfo = cInfo |> addBlock("code block") |> createBlockContent |> addBlockAttribute(TagLength, tagLen)
+
+						if typeChar == "`" do 
+							cInfo = cInfo |> addBlockAttribute(Type,1)
+							class = Regex.replace(~r/^\s*`{3,}\s*/, line, "")
+						else
+							cInfo = cInfo |> addBlockAttribute(Type,3)
+							class = Regex.replace(~r/^\s*~{3,}\s*/, line, "")
+						end
+
 						if !empty?(class) do
 							cInfo = cInfo |> addBlockAttribute(Class,"language-" <> class)
 						end 
@@ -121,7 +146,9 @@ defmodule Parser do
 			end
 
 		else
-			if currentBlock != "code block" or (currentBlock == "code block" and cInfo[CurrentBlock][Type] == "2") do
+			if currentBlock == "code block" do
+				cInfo = cInfo |> addChars(line)
+			else
 				cInfo = cInfo |> finishBlock
 			end	
 		end
@@ -152,17 +179,24 @@ defmodule Parser do
 
 		if cInfo[CurrentBlock] do
 
+			currentBlock = cInfo[CurrentBlock]
+
 			cond do
-				cInfo[CurrentBlock][Block] == "code block" ->
-					currentBlock = Map.delete(cInfo[CurrentBlock],Type)
-				cInfo[CurrentBlock][Block] == "heading" ->
-					if Regex.match?(~R/\s#+\s*$/,Enum.at(cInfo[CurrentBlock][Content],-1)[Text]) do
-						currentBlock = cInfo[CurrentBlock] |> trimSpecialHeading |> trimBlockContent
+				currentBlock[Block] == "code block" ->
+					if currentBlock[Type] == 1 or currentBlock[Type] == 3 do
+						currentBlock = Map.delete(currentBlock,TagLength) 
+					end
+
+					currentBlock = Map.delete(currentBlock,Type)
+					
+				currentBlock[Block] == "heading" ->
+					if Regex.match?(~R/\s#+\s*$/,Enum.at(currentBlock[Content],-1)[Text]) do
+						currentBlock = currentBlock |> trimSpecialHeading |> trimBlockContent
 					else
-						currentBlock = cInfo[CurrentBlock] |> trimBlockContent
+						currentBlock = currentBlock |> trimBlockContent
 					end 
 				true ->
-					currentBlock = cInfo[CurrentBlock] |> trimBlockContent
+					currentBlock = currentBlock |> trimBlockContent
 			end
 			
 			Map.put(cInfo, AST, cInfo[AST] ++ [currentBlock])

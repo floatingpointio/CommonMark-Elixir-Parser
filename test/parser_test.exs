@@ -122,14 +122,18 @@ defmodule ParserTest do
 	end
 
 	test "codeBlockTest1" do
-		input = ~s(```testna\nblablabla\nblbalbalb\n\njos malo blablbalba\n----------\n\n___________\n# Nije heading\n`````)
+		input = ~s(    ~~~~~~~testna\nblablabla\n~~~~~\n```\nblbalbalb\n\njos malo blablbalba\n----------\n\n___________\n# Nije heading\n~~~~~~~~~)
 
 		expected = [
 			%{
 				Block => "code block" ,Content => [%{Text => "blablabla", Type => "normal"},
+												   %{Text => "~~~~~", Type => "normal"},
+												    %{Text => "```", Type => "normal"},
 												   %{Text => "blbalbalb", Type => "normal"},
+												   %{Text => "", Type => "normal"},
 												   %{Text => "jos malo blablbalba", Type => "normal"},
 												   %{Text => "----------", Type => "normal"},
+												   %{Text => "", Type => "normal"},
 												   %{Text => "___________", Type => "normal"},
 												   %{Text => "# Nije heading", Type => "normal"},
 												  ], Class => "language-testna"
@@ -140,11 +144,12 @@ defmodule ParserTest do
 	end
 
 	test "codeBlockTest2" do
-		input = ~s(    janjetinajanjetina\n    prastetinaprasetina\nsrnetinasrnetina\n      zec)
+		input = ~s(    janjetinajanjetina\n       \n    prastetinaprasetina\nsrnetinasrnetina\n      zec)
 
 		expected = [
 			%{
 				Block => "code block" ,Content => [%{Text => "janjetinajanjetina", Type => "normal"},
+												   %{Text => "       ", Type => "normal"},
 												   %{Text => "prastetinaprasetina", Type => "normal"}
 												  ]
 			},
