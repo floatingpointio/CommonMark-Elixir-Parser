@@ -122,13 +122,16 @@ defmodule ParserTest do
 	end
 
 	test "codeBlockTest1" do
-		input = ~s(    ~~~~~~~testna\nblablabla\n~~~~~\n```\nblbalbalb\n\njos malo blablbalba\n----------\n\n___________\n# Nije heading\n~~~~~~~~~)
+		input = ~s(aasdasdasdasdsdasdasd\n    ~~~~~~~testna\n<![CDATA[blablabla\n~~~~~\n```\nblbalbalb\n\njos malo blablbalba\n----------\n\n___________\n# Nije heading\n~~~~~~~~~)
 
 		expected = [
+			%{Block => "paragraph", Content => [%{Text => "aasdasdasdasdsdasdasd", Type => "normal"}]
+
+			},
 			%{
-				Block => "code block" ,Content => [%{Text => "blablabla", Type => "normal"},
+				Block => "code block" ,Content => [%{Text => "<![CDATA[blablabla", Type => "normal"},
 												   %{Text => "~~~~~", Type => "normal"},
-												    %{Text => "```", Type => "normal"},
+												   %{Text => "```", Type => "normal"},
 												   %{Text => "blbalbalb", Type => "normal"},
 												   %{Text => "", Type => "normal"},
 												   %{Text => "jos malo blablbalba", Type => "normal"},
@@ -159,6 +162,65 @@ defmodule ParserTest do
 			%{
 				Block => "code block" ,Content => [%{Text => "  zec", Type => "normal"}]
 			}
+		]
+		result = Parser.parse(input)
+		assert(result == expected)
+	end
+
+
+
+	test "htmlBlockTest1" do
+		input = ~s(Ovo je paragraf\n<div bla bla balba blba\n    asdasdasd\n```` janje\ntralalalal\n\n<table/>tralalalalalala\n-----------\n* * * * * * *\n\n)
+
+		expected = [
+			%{
+				Block => "paragraph",Content => [%{Text => "Ovo je paragraf", Type => "normal"}]
+			},
+			%{
+				Block => "HTML block" ,Content => [%{Text => "<div bla bla balba blba", Type => "normal"},
+												   %{Text => "    asdasdasd", Type => "normal"},
+												   %{Text => "```` janje", Type => "normal"},
+												   %{Text => "tralalalal", Type => "normal"}
+												  ]
+			},
+			%{
+				Block => "HTML block" ,Content => [%{Text => "<table/>tralalalalalala", Type => "normal"},
+												   %{Text => "-----------", Type => "normal"},
+												   %{Text => "* * * * * * *", Type => "normal"}				   
+												  ]
+			},
+		]
+		result = Parser.parse(input)
+		assert(result == expected)
+	end
+
+
+	test "htmlBlockTest2" do
+		input = ~s(</div>\n## janje   \n\nOvo je paragraf\n<? bla bla balba blba\n<!A    asdasdasd\n```` janje\ntralal?>alal\n\n<!G/>tralalalalalala\n-----------\n* * * * * * *\n)
+
+		expected = [
+			%{
+				Block => "HTML block" ,Content => [%{Text => "</div>", Type => "normal"},
+												   %{Text => "## janje   ", Type => "normal"}
+												  ]
+			},
+			%{
+				Block => "paragraph",Content => [%{Text => "Ovo je paragraf", Type => "normal"}]
+			},
+			%{
+				Block => "HTML block" ,Content => [%{Text => "<? bla bla balba blba", Type => "normal"},
+												   %{Text => "<!A    asdasdasd", Type => "normal"},
+												   %{Text => "```` janje", Type => "normal"},
+												   %{Text => "tralal?>alal", Type => "normal"}
+												  ]
+			},
+			%{
+				Block => "HTML block" ,Content => [%{Text => "<!G/>tralalalalalala", Type => "normal"},
+												   %{Text => "-----------", Type => "normal"},
+												   %{Text => "* * * * * * *", Type => "normal"},
+												   %{Text => "", Type => "normal"}					   
+												  ]
+			},
 		]
 		result = Parser.parse(input)
 		assert(result == expected)

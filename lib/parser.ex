@@ -28,10 +28,79 @@ defmodule Parser do
 	defp parseLines([line|rest], cInfo) do
 
 		currentBlock = cInfo[CurrentBlock][Block]
+		htmlTagPairs = %{"<?" => "?>", "<!" => "!>", "<!--" => "--\>", "<![CDATA]" => "]]>"} 
 
 		if !empty?(line) do	
 
 			cond do
+
+				# HTML Blocks: <div, </div>
+
+				Regex.match?(~r/^<\/?(adress|article|aside|base|basefront|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h1|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(\s|>|\/>|$)/iu,line) ->
+
+					if currentBlock do
+						cond do
+							currentBlock == "paragraph" ->
+								cInfo = cInfo |> finishBlock
+								cInfo = cInfo |> addBlock("HTML block") |> createBlockContent |> addBlockAttribute(TagType, "Regular") |> addChars(line)
+							true ->
+								cInfo = cInfo |> addChars(line)
+						end
+					else
+						cInfo = cInfo |> addBlock("HTML block") |> createBlockContent |> addBlockAttribute(TagType, "Regular") |> addChars(line)
+					end
+
+
+				# HTML opening blocks 2: <?, <![CDATA] 
+
+				Regex.match?(~r/^\s{0,3}(<!--|<\?|<![A-Z]|s<!\[CDATA\])/,line) ->
+
+					tagType = String.trim(Enum.at(Regex.run(~r/^\s{0,3}(<!--|<\?|<![A-Z]|s<!\[CDATA\])/,line),0))
+					
+					if currentBlock do
+						cond do
+							currentBlock == "paragraph" ->
+								cInfo = cInfo |> finishBlock
+								cInfo = cInfo |> addBlock("HTML block") |> createBlockContent |> addBlockAttribute(TagType, tagType) |> addChars(line)
+							
+							currentBlock == "code block" and cInfo[CurrentBlock][Type] == 2 ->
+								cInfo = cInfo |> finishBlock
+								cInfo = cInfo |> addBlock("HTML block") |> createBlockContent |> addBlockAttribute(TagType, tagType) |> addChars(line)
+							true ->
+								cInfo = cInfo |> addChars(line)
+						end
+					else
+						cInfo = cInfo |> addBlock("HTML block") |> createBlockContent |> addBlockAttribute(TagType, tagType) |> addChars(line)
+
+					end
+					
+
+				# HTML closing block 2: ?>, !>, ]]>
+
+				Regex.match?(~r/(--\>|\?>|\!>|\]\]>)/,line) -> 
+
+					tagType = String.trim(Enum.at(Regex.run(~r/(--\>|\?>|\!>|\]\]>)/,line),0))
+
+					if currentBlock do
+						cond do
+							currentBlock == "HTML block" ->
+								tagTypeOpening = cInfo[CurrentBlock][TagType]
+								if htmlTagPairs[tagTypeOpening] == tagType do
+									cInfo = cInfo |> addChars(line) |> finishBlock
+								else
+									cInfo = cInfo |> addChars(line) 
+								end
+							currentBlock == "code block" ->
+								cInfo = cInfo |> addChars(line)
+							currentBlock == "paragraph" ->
+								cInfo = String.graphemes(line) |> parseLineChars(cInfo)
+						end
+					else
+						cInfo = String.graphemes(line) |> parseLineChars(cInfo)
+					end
+
+
+				# Code block opening type 1: ```, ~~~~~
 
 
 				Regex.match?(~r/^\s*(`|~){3,}\s*/,line) ->
@@ -42,27 +111,31 @@ defmodule Parser do
 
 
 					if currentBlock do
-						if currentBlock == "code block" do
-							if tagLen >= cInfo[CurrentBlock][TagLength] and ((typeChar == "`" and cInfo[CurrentBlock][Type] == 1) or (typeChar == "~" and cInfo[CurrentBlock][Type] == 3)) do
-								cInfo = cInfo |> finishBlock	
-							else
+						cond do
+							currentBlock == "code block" ->
+								if tagLen >= cInfo[CurrentBlock][TagLength] and ((typeChar == "`" and cInfo[CurrentBlock][Type] == 1) or (typeChar == "~" and cInfo[CurrentBlock][Type] == 3)) do
+									cInfo = cInfo |> finishBlock	
+								else
+									cInfo = cInfo |> addChars(line)
+								end
+							currentBlock == "HTML block" ->
 								cInfo = cInfo |> addChars(line)
-							end
-						else
-							cInfo = cInfo |> addBlock("code block") |> createBlockContent |> addBlockAttribute(TagLength,tagLen)
+							true ->
+								cInfo = cInfo |> finishBlock |> addBlock("code block") |> createBlockContent |> addBlockAttribute(TagLength,tagLen)
 
-							if typeChar == "`" do 
-								cInfo = cInfo |> addBlockAttribute(Type,1)
-								class = Regex.replace(~r/^\s*`{3,}\s*/, line, "")
-							else
-								cInfo = cInfo |> addBlockAttribute(Type,3)
-								class = Regex.replace(~r/^\s*~{3,}\s*/, line, "")
-							end
-							
-							if !empty?(class) do
-								cInfo = cInfo |> addBlockAttribute(Class,"language-" <> class)
-							end 	
+								if typeChar == "`" do 
+									cInfo = cInfo |> addBlockAttribute(Type,1)
+									class = Regex.replace(~r/^\s*`{3,}\s*/, line, "")
+								else
+									cInfo = cInfo |> addBlockAttribute(Type,3)
+									class = Regex.replace(~r/^\s*~{3,}\s*/, line, "")
+								end
+								
+								if !empty?(class) do
+									cInfo = cInfo |> addBlockAttribute(Class,"language-" <> class)
+								end 	
 						end
+							
 					else
 						cInfo = cInfo |> addBlock("code block") |> createBlockContent |> addBlockAttribute(TagLength, tagLen)
 
@@ -79,6 +152,9 @@ defmodule Parser do
 						end 
 					end
 
+
+				# Code block type 2: \s\s\s\s
+
 				Regex.match?(~r/^\s{4}.+$/, line) ->
 
 					text = Regex.replace(~r/^\s{4}/, line, "")
@@ -88,7 +164,10 @@ defmodule Parser do
 						cond do
 							currentBlock == "paragraph" ->
 								cInfo =  cInfo |> finishBlock |> addBlock("code block") |> createBlockContent |> addBlockAttribute(Type, 2) |> addChars(text)
-							currentBlock == "code block" and cInfo[CurrentBlock][Type] == 1 ->
+							currentBlock == "HTML block" ->
+								cInfo = cInfo |> addChars(line)
+						
+							currentBlock == "code block" and (cInfo[CurrentBlock][Type] == 1 or cInfo[CurrentBlock][Type] == 3)->
 								cInfo = cInfo |> addChars(line) 
 							currentBlock == "code block" and cInfo[CurrentBlock][Type] == 2 ->
 								cInfo = cInfo |> addChars(text) 	
@@ -98,14 +177,25 @@ defmodule Parser do
 
 				(Regex.match?(~R/^#{1,6}$/, line) or Regex.match?(~R/^#{1,6}\s+#+\s*$/,line)) and currentBlock != "code block"->
 
-					if currentBlock == "paragraph" do
-						cInfo = cInfo |> finishBlock
+					if currentBlock do
+						cond do
+							currentBlock == "paragraph" ->
+								cInfo = cInfo |> finishBlock
+								level = String.length(String.trim(Enum.at(Regex.run(~R/^\s*#{1,6}/,line),-1)))
+								cInfo = cInfo |> addBlock("heading", level, "", "normal") |> finishBlock
+							currentBlock == "code block" and (cInfo[CurrentBlock][Type] == 1 or cInfo[CurrentBlock][Type] == 3)->
+								cInfo = cInfo |> addChars(line)
+							currentBlock == "HTML block" ->
+								cInfo = cInfo |> addChars(line)
+						end
+					else
+						level = String.length(String.trim(Enum.at(Regex.run(~R/^\s*#{1,6}/,line),-1)))
+						cInfo = cInfo |> addBlock("heading", level, "", "normal") |> finishBlock
 					end
 
-					level = String.length(String.trim(Enum.at(Regex.run(~R/^\s*#{1,6}/,line),-1)))
-					cInfo = cInfo |> addBlock("heading", level, "", "normal") |> finishBlock
+					
 
-				Regex.match?(~r/^\s{0,3}=+\s*$/,line) and currentBlock != "code block"->
+				Regex.match?(~r/^\s{0,3}=+\s*$/,line) and (currentBlock != "code block" and currentBlock != "HTML block") ->
 					if currentBlock do
 						if currentBlock == "paragraph" do
 							cInfo = cInfo |> moveBlockContent(cInfo[CurrentBlock][Content], "heading", 1)	
@@ -116,7 +206,7 @@ defmodule Parser do
 						cInfo = cInfo
 					end
 
-				Regex.match?(~r/^\s{0,3}-+\s*$/,line) and currentBlock != "code block" ->
+				Regex.match?(~r/^\s{0,3}-+\s*$/,line) and (currentBlock != "code block" and currentBlock != "HTML block") ->
 					if currentBlock do
 						if currentBlock == "paragraph" do
 							cInfo = cInfo |> moveBlockContent(cInfo[CurrentBlock][Content], "heading", 2)	
@@ -126,17 +216,44 @@ defmodule Parser do
 					else
 						cInfo = cInfo |> addBlock("horizontal line")
 					end
+
 				(Regex.match?(~R/^\s*(_|\*|-)+\s*$/,line) or Regex.match?(~r/^\s*(-+\s+){2}(-+\s*)*$/,line) or Regex.match?(~R/^\s*(_+\s+){2}(_+\s*)*$/,line) or Regex.match?(~R/^\s*(\*+\s+){2}(\*+\s*)*$/,line) or Regex.match?(~R/^\s*(=+\s+){2}(=+\s*)*$/,line)) and currentBlock != "code block" ->
 
-					if cInfo[CurrentBlock] do
-						cInfo = cInfo |> finishBlock
+					if currentBlock do
+						cond do
+							currentBlock == "paragraph" ->
+								cInfo = cInfo |> finishBlock
+								cInfo = cInfo |> addBlock("horizontal line")
+							currentBlock == "code block" and (cInfo[CurrentBlock][Type] == 1 or cInfo[CurrentBlock][Type] == 3) ->
+								cInfo = cInfo |> addChars(line)
+							currentBlock == "HTML block" ->
+								cInfo = cInfo |> addChars(line)
+							true ->
+								cInfo = cInfo |> finishBlock
+								cInfo = cInfo |> addBlock("horizontal line")
+						end
+					else
+						cInfo = cInfo |> addBlock("horizontal line")
 					end
-					cInfo = cInfo |> addBlock("horizontal line")
+					
+					
 				true ->
-					if (currentBlock == "code block"  and cInfo[CurrentBlock][Type] == 2) do
-						cInfo = cInfo |> finishBlock
+
+					cond do
+						currentBlock == "code block"  and cInfo[CurrentBlock][Type] == 2 ->
+							cInfo = cInfo |> finishBlock
+							cInfo = String.graphemes(line) |> parseLineChars(cInfo)
+						currentBlock == "HTML block" ->
+							cInfo = cInfo |> addChars(line)
+						currentBlock == "code block" and (cInfo[CurrentBlock][Type] == 1 or cInfo[CurrentBlock][Type] == 3) -> 
+							cInfo = cInfo |> addChars(line)
+						currentBlock == "paragraph" ->
+							cInfo = String.graphemes(line) |> parseLineChars(cInfo)
+						true ->
+							cInfo = String.graphemes(line) |> parseLineChars(cInfo)
+						
 					end 
-					cInfo = String.graphemes(line) |> parseLineChars(cInfo)
+					
 
 			end
 
@@ -146,7 +263,7 @@ defmodule Parser do
 			end
 
 		else
-			if currentBlock == "code block" do
+			if currentBlock == "code block" or (currentBlock == "HTML block" and cInfo[CurrentBlock][TagType] != "Regular") do
 				cInfo = cInfo |> addChars(line)
 			else
 				cInfo = cInfo |> finishBlock
@@ -188,6 +305,10 @@ defmodule Parser do
 					end
 
 					currentBlock = Map.delete(currentBlock,Type)
+
+				currentBlock[Block] == "HTML block" ->
+
+					currentBlock = Map.delete(currentBlock,TagType)
 					
 				currentBlock[Block] == "heading" ->
 					if Regex.match?(~R/\s#+\s*$/,Enum.at(currentBlock[Content],-1)[Text]) do
@@ -234,7 +355,12 @@ defmodule Parser do
 				blockCharset?(previousChar) and !escaped?(previousChar) ->
 					cInfo = cInfo |> processBlock(previousChar) |> addChars(char)
 				space?(previousChar) and cInfo[CurrentBlock] ->
-			    	cInfo = cInfo
+					if cInfo[CurrentBlock][Block] == "code block" or cInfo[CurrentBlock][Block] == "HTML block" do
+						cInfo = cInfo |> addChars(char)
+					else
+						cInfo = cInfo
+					end
+			    	
 				regularCharset?(previousChar) or previousChar == ""->
 					cInfo = cInfo |> addChars(char)
 			    
@@ -280,7 +406,7 @@ defmodule Parser do
 	defp addChars(cInfo, char) do
 
 		if cInfo[CurrentBlock] do
-			
+			IO.inspect(cInfo[CurrentBlock])
 			if !(Enum.at(String.graphemes(cInfo[CurrentLine]),-1) == " " and char == " ") do
 				
 				if String.length(cInfo[CurrentLine]) == 0 do
